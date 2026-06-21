@@ -1,15 +1,13 @@
-const TSDB_BASE = "https://www.thesportsdb.com/api/v1/json";
-const CACHE_TTL_SECONDS = 7200; // 2 hours (standings update less frequently)
+const CACHE_TTL_SECONDS = 7200; // 2 hours
 
 export async function onRequestGet(context) {
-  const { env, request } = context;
-  const url = new URL(request.url);
-  const group = url.searchParams.get("group");
+  const { env } = context;
+  const url = new URL(context.request.url);
+  const group = url.searchParams.get("group") || null;
 
   try {
-    const cacheKey = group ? `standings_group_${group}_2026` : `standings_all_2026`;
+    const cacheKey = `standings_fd_wc2026_v1`;
     const cached = await env.WORLDCUP_KV.get(cacheKey, { type: "json" });
-
     let standings;
     let fromCache = false;
 
@@ -17,22 +15,22 @@ export async function onRequestGet(context) {
       standings = cached.data;
       fromCache = true;
     } else {
-      const key = env.TSDB_KEY || "3";
-      // TheSportsDB league ID for FIFA World Cup may vary; 4424 is commonly referenced.
-      const apiUrl = `${TSDB_BASE}/${key}/lookuptable.php?l=4424&s=2026-2027`;
+      const fdKey = env.FOOTBALL_DATA_KEY;
+      if (!fdKey) {
+        throw new Error("Missing FOOTBALL_DATA_KEY env variable. Get free key at https://www.football-data.org/client/register");
+      }
 
-      const upstream = await fetch(apiUrl, {
-        headers: { Accept: "application/json" },
-        cf: { cacheTtl: 600 },
+      const upstream = await fetch("https://api.football-data.org/v4/competitions/WC/standings", {
+        headers: { "X-Auth-Token": fdKey },
       });
 
       if (!upstream.ok) {
-        throw new Error(`Upstream API error: ${upstream.status}`);
+        const errText = await upstream.text().catch(() => "");
+        throw new Error(`Football-Data.org API error (${upstream.status}): ${errText || upstream.statusText}`);
       }
 
       const data = await upstream.json();
-      const table = Array.isArray(data.table) ? data.table : [];
-      standings = normalizeStandings(table);
+      standings = normalizeStandings(data);
 
       await env.WORLDCUP_KV.put(
         cacheKey,
@@ -44,13 +42,6 @@ export async function onRequestGet(context) {
     if (group) {
       result = standings.filter((s) => s.group === group.toUpperCase());
     }
-
-    // Sort by group name ASC, then points DESC, then goal difference DESC
-    result.sort((a, b) => {
-      if (a.group !== b.group) return (a.group || "").localeCompare(b.group || "");
-      if (b.points !== a.points) return b.points - a.points;
-      return b.goalDifference - a.goalDifference;
-    });
 
     return jsonResponse({
       success: true,
@@ -68,22 +59,45 @@ export async function onRequestGet(context) {
   }
 }
 
-function normalizeStandings(rows) {
-  return rows.map((row) => ({
-    rank: parseInt(row.intRank, 10) || null,
-    team: row.strTeam,
-    teamBadge: row.strTeamBadge || null,
-    group: row.strGroup?.replace(/Group /i, "").toUpperCase() || null,
-    played: parseInt(row.intPlayed, 10) || 0,
-    won: parseInt(row.intWin, 10) || 0,
-    drawn: parseInt(row.intDraw, 10) || 0,
-    lost: parseInt(row.intLoss, 10) || 0,
-    goalsFor: parseInt(row.intGoalsFor, 10) || 0,
-    goalsAgainst: parseInt(row.intGoalsAgainst, 10) || 0,
-    goalDifference: parseInt(row.intGoalDifference, 10) || 0,
-    points: parseInt(row.intPoints, 10) || 0,
-    form: row.strForm || "",
-  }));
+function normalizeStandings(data) {
+  const result = [];
+  const standings = data?.standings || [];
+
+  for (const st of standings) {
+    if (st.type !== "TOTAL" && st.type !== "HOME" && st.type !== "AWAY") continue;
+    if (st.type !== "TOTAL") continue; // only TOTAL tables
+
+    const groupLabel = st.group?.replace(/^GROUP_/, "")?.toUpperCase() || (st.stage === "GROUP_STAGE" ? "A" : null);
+    if (!groupLabel) continue;
+
+    const rows = st.table || [];
+    for (const row of rows) {
+      result.push({
+        rank: row.position,
+        team: row.team?.name || "Unknown",
+        teamBadge: row.team?.crest || null,
+        group: groupLabel,
+        played: row.playedGames,
+        won: row.won,
+        drawn: row.draw,
+        lost: row.lost,
+        goalsFor: row.goalsFor,
+        goalsAgainst: row.goalsAgainst,
+        goalDifference: row.goalDifference,
+        points: row.points,
+        form: row.form || "",
+      });
+    }
+  }
+
+  // Sort by group name ASC, points DESC, GD DESC
+  result.sort((a, b) => {
+    if (a.group !== b.group) return a.group.localeCompare(b.group);
+    if (b.points !== a.points) return b.points - a.points;
+    return b.goalDifference - a.goalDifference;
+  });
+
+  return result;
 }
 
 function jsonResponse(body, status = 200) {

@@ -1,6 +1,3 @@
-# Cloudflare Pages + Workers configuration
-# Replace KV namespace IDs after creating them in Cloudflare dashboard
-
 name = "ds"
 pages_build_output_dir = "."
 compatibility_date = "2026-01-01"
@@ -11,4 +8,5 @@ binding = "WORLDCUP_KV"
 id = "550a9631d0ce4f33841281537994eae3"
 
 [vars]
-TSDB_KEY = "3"
+# Get free API key: https://www.football-data.org/client/register
+FOOTBALL_DATA_KEY = ""

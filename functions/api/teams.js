@@ -1,13 +1,11 @@
-const TSDB_BASE = "https://www.thesportsdb.com/api/v1/json";
 const CACHE_TTL_SECONDS = 86400; // 24 hours
 
 export async function onRequestGet(context) {
   const { env } = context;
 
   try {
-    const cacheKey = "teams_worldcup_2026";
+    const cacheKey = `teams_fd_wc2026_v1`;
     const cached = await env.WORLDCUP_KV.get(cacheKey, { type: "json" });
-
     let teams;
     let fromCache = false;
 
@@ -15,22 +13,23 @@ export async function onRequestGet(context) {
       teams = cached.data;
       fromCache = true;
     } else {
-      const key = env.TSDB_KEY || "3";
-      // List all teams in the FIFA World Cup 2026
-      const apiUrl = `${TSDB_BASE}/${key}/lookup_all_teams.php?id=4424`;
+      const fdKey = env.FOOTBALL_DATA_KEY;
+      if (!fdKey) {
+        throw new Error("Missing FOOTBALL_DATA_KEY env variable. Get free key at https://www.football-data.org/client/register");
+      }
 
-      const upstream = await fetch(apiUrl, {
-        headers: { Accept: "application/json" },
-        cf: { cacheTtl: 3600 },
+      const upstream = await fetch("https://api.football-data.org/v4/competitions/WC/teams", {
+        headers: { "X-Auth-Token": fdKey },
       });
 
       if (!upstream.ok) {
-        throw new Error(`Upstream API error: ${upstream.status}`);
+        const errText = await upstream.text().catch(() => "");
+        throw new Error(`Football-Data.org API error (${upstream.status}): ${errText || upstream.statusText}`);
       }
 
       const data = await upstream.json();
-      const items = Array.isArray(data.teams) ? data.teams : [];
-      teams = normalizeTeams(items);
+      const apiTeams = Array.isArray(data.teams) ? data.teams : [];
+      teams = normalizeTeams(apiTeams);
 
       await env.WORLDCUP_KV.put(
         cacheKey,
@@ -56,15 +55,15 @@ export async function onRequestGet(context) {
 function normalizeTeams(items) {
   return items
     .map((t) => ({
-      id: t.idTeam,
-      name: t.strTeam,
-      shortName: t.strTeamShort || t.strTeam,
-      badge: t.strTeamBadge,
-      country: t.strCountry,
-      formed: t.intFormedYear,
-      stadium: t.strStadium,
-      website: t.strWebsite,
-      description: t.strDescriptionEN,
+      id: t.id?.toString(),
+      name: t.name || "Unknown",
+      shortName: t.shortName || t.tla || t.name,
+      badge: t.crest || null,
+      country: t.area?.name || t.country || null,
+      venue: t.venue || null,
+      founded: t.founded || null,
+      website: t.website || null,
+      clubColors: t.clubColors || null,
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }

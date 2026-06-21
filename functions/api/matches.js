@@ -1,16 +1,16 @@
-const TSDB_BASE = "https://www.thesportsdb.com/api/v1/json";
-const CACHE_TTL_SECONDS = 1800; // 30 minutes (matches change often during tournament)
+const FD_BASE = "https://api.football-data.org/v4";
+const FD_TTL_SECONDS = 1800; // 30 min
+const CACHE_TTL_SECONDS = 1800;
 
 export async function onRequestGet(context) {
   const { env, request } = context;
   const url = new URL(request.url);
-  const filter = url.searchParams.get("filter") || "all"; // all | upcoming | finished
+  const filter = url.searchParams.get("filter") || "all";
   const group = url.searchParams.get("group") || null;
 
   try {
-    const cacheKey = `matches_2026_v2`;
+    const cacheKey = `matches_fd_wc2026_v1`;
     const cached = await env.WORLDCUP_KV.get(cacheKey, { type: "json" });
-
     let matches;
     let fromCache = false;
 
@@ -18,21 +18,24 @@ export async function onRequestGet(context) {
       matches = cached.data;
       fromCache = true;
     } else {
-      const key = env.TSDB_KEY || "3";
-      const apiUrl = `${TSDB_BASE}/${key}/search_all_events.php?l=FIFA%20World%20Cup&s=2026`;
+      const fdKey = env.FOOTBALL_DATA_KEY;
+      if (!fdKey) {
+        throw new Error("Missing FOOTBALL_DATA_KEY env variable. Get free key at https://www.football-data.org/client/register");
+      }
 
-      const upstream = await fetch(apiUrl, {
-        headers: { Accept: "application/json" },
-        cf: { cacheTtl: 300 },
+      // Fetch World Cup matches (competition code WC for FIFA World Cup)
+      const upstream = await fetch(`${FD_BASE}/competitions/WC/matches`, {
+        headers: { "X-Auth-Token": fdKey },
       });
 
       if (!upstream.ok) {
-        throw new Error(`Upstream API error: ${upstream.status}`);
+        const errText = await upstream.text().catch(() => "");
+        throw new Error(`Football-Data.org API error (${upstream.status}): ${errText || upstream.statusText}`);
       }
 
       const data = await upstream.json();
-      const events = Array.isArray(data.event) ? data.event : [];
-      matches = normalizeMatches(events);
+      const apiMatches = Array.isArray(data.matches) ? data.matches : [];
+      matches = normalizeMatches(apiMatches);
 
       await env.WORLDCUP_KV.put(
         cacheKey,
@@ -59,82 +62,75 @@ export async function onRequestGet(context) {
   }
 }
 
-function normalizeMatches(events) {
-  return events
-    .map((ev) => {
-      const matchDateTime = toDateTime(ev.dateEvent, ev.strTime);
+function normalizeMatches(apiMatches) {
+  return apiMatches
+    .map((m) => {
       const now = new Date();
-      const status = inferStatus(ev, matchDateTime, now);
+      const kickoff = m.utcDate ? new Date(m.utcDate) : null;
+      const status = inferStatus(m, kickoff, now);
+      const homeScore = m.score?.fullTime?.home;
+      const awayScore = m.score?.fullTime?.away;
 
       return {
-        id: ev.idEvent,
-        homeTeam: ev.strHomeTeam,
-        awayTeam: ev.strAwayTeam,
-        homeScore: parseScore(ev.intHomeScore),
-        awayScore: parseScore(ev.intAwayScore),
-        date: ev.dateEvent,
-        timeLocal: ev.strTime,
-        datetimeUtc: matchDateTime ? matchDateTime.toISOString() : null,
-        round: ev.strRound,
-        group: extractGroup(ev.strRound),
-        venue: ev.strVenue,
-        city: ev.strCity,
-        country: ev.strCountry,
+        id: m.id?.toString(),
+        homeTeam: m.homeTeam?.name || "TBD",
+        awayTeam: m.awayTeam?.name || "TBD",
+        homeScore: homeScore !== null && homeScore !== undefined ? homeScore : null,
+        awayScore: awayScore !== null && awayScore !== undefined ? awayScore : null,
+        date: kickoff ? formatDate(kickoff) : null,
+        timeLocal: kickoff ? formatTime(kickoff) : null,
+        datetimeUtc: kickoff ? kickoff.toISOString() : null,
+        round: m.stage || m.matchday ? `Matchday ${m.matchday}` : null,
+        group: extractGroup(m),
+        venue: m.venue || null,
+        city: null,
+        country: null,
         status,
-        homeBadge: ev.strHomeTeamBadge || null,
-        awayBadge: ev.strAwayTeamBadge || null,
-        video: ev.strVideo || null,
+        homeBadge: null,
+        awayBadge: null,
+        video: null,
+        season: m.season?.id?.toString(),
       };
     })
-    .sort((a, b) => new Date(a.datetimeUtc || 0) - new Date(b.datetimeUtc || 0));
+    .sort((a, b) => {
+      if (!a.datetimeUtc) return 1;
+      if (!b.datetimeUtc) return -1;
+      return new Date(a.datetimeUtc) - new Date(b.datetimeUtc);
+    });
 }
 
-function toDateTime(dateStr, timeStr) {
-  if (!dateStr) return null;
-  const time = timeStr || "00:00:00";
-  return new Date(`${dateStr}T${time}Z`);
+function formatDate(d) {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
-function inferStatus(ev, matchDateTime, now) {
-  if (ev.strStatus && ev.strStatus.toLowerCase() === "match finished") {
-    return "finished";
-  }
-  if (ev.intHomeScore !== null && ev.intAwayScore !== null) {
-    return "finished";
-  }
-  if (!matchDateTime) return "upcoming";
+function formatTime(d) {
+  return d.toISOString().slice(11, 19);
+}
 
-  const diffMinutes = (now - matchDateTime) / (1000 * 60);
+function extractGroup(m) {
+  if (!m.group) return null;
+  // Football-Data returns "GROUP_A", "GROUP_B", etc.
+  const match = m.group.match(/GROUP_([A-H])/i);
+  return match ? match[1].toUpperCase() : null;
+}
 
-  if (diffMinutes >= -5 && diffMinutes < 105) {
-    return "live";
-  }
-  if (diffMinutes >= 105) {
-    return "finished";
+function inferStatus(m, kickoff, now) {
+  // Football-Data statuses: SCHEDULED, TIMED, IN_PLAY, PAUSED, FINISHED, POSTPONED, CANCELLED, AWARDED
+  const s = (m.status || "").toUpperCase();
+
+  if (s === "FINISHED" || s === "AWARDED") return "finished";
+  if (s === "IN_PLAY" || s === "PAUSED") return "live";
+  if (s === "POSTPONED" || s === "CANCELLED") return "finished"; // treat as finished for UI
+  if (s === "SCHEDULED" || s === "TIMED") {
+    if (!kickoff) return "upcoming";
+    const diffMin = (now - kickoff) / 60000;
+    if (diffMin >= -5 && diffMin < 110) return "live";
+    return "upcoming";
   }
   return "upcoming";
-}
-
-function parseScore(value) {
-  if (value === "" || value === null || value === undefined) return null;
-  const parsed = parseInt(value, 10);
-  return isNaN(parsed) ? null : parsed;
-}
-
-function extractGroup(roundStr) {
-  if (!roundStr) return null;
-  const normalized = roundStr.replace(/ Round/gi, "").trim();
-  const mapping = {
-    "Group A": "A",
-    "Group B": "B",
-    "Group C": "C",
-    "Group D": "D",
-    "Group E": "E",
-    "Group F": "F",
-    "Group G": "G",
-    "Group H": "H",
-  };
-  return mapping[normalized] || null;
 }
 
 function applyFilter(matches, filter, group) {
