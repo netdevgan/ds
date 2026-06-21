@@ -23,19 +23,23 @@ export async function onRequestGet(context) {
         throw new Error("Missing FOOTBALL_DATA_KEY env variable. Get free key at https://www.football-data.org/client/register");
       }
 
-      // Fetch World Cup matches (competition code WC for FIFA World Cup)
-      const upstream = await fetch(`${FD_BASE}/competitions/WC/matches`, {
+      // Fetch matches
+      const matchesResp = await fetch(`${FD_BASE}/competitions/WC/matches`, {
         headers: { "X-Auth-Token": fdKey },
       });
 
-      if (!upstream.ok) {
-        const errText = await upstream.text().catch(() => "");
-        throw new Error(`Football-Data.org API error (${upstream.status}): ${errText || upstream.statusText}`);
+      if (!matchesResp.ok) {
+        const errText = await matchesResp.text().catch(() => "");
+        throw new Error(`Football-Data.org API error (${matchesResp.status}): ${errText || matchesResp.statusText}`);
       }
 
-      const data = await upstream.json();
-      const apiMatches = Array.isArray(data.matches) ? data.matches : [];
-      matches = normalizeMatches(apiMatches);
+      const matchesData = await matchesResp.json();
+      const apiMatches = Array.isArray(matchesData.matches) ? matchesData.matches : [];
+
+      // Fetch team crests for badges
+      const crestMap = await fetchTeamCrests(env, fdKey);
+
+      matches = normalizeMatches(apiMatches, crestMap);
 
       await env.WORLDCUP_KV.put(
         cacheKey,
@@ -62,7 +66,39 @@ export async function onRequestGet(context) {
   }
 }
 
-function normalizeMatches(apiMatches) {
+async function fetchTeamCrests(env, fdKey) {
+  const cacheKey = "fd_crest_map_v1";
+  const cached = await env.WORLDCUP_KV.get(cacheKey, { type: "json" });
+  if (cached && cached.timestamp && (Date.now() - cached.timestamp < 86400000)) {
+    return cached.data;
+  }
+
+  const resp = await fetch(`${FD_BASE}/competitions/WC/teams`, {
+    headers: { "X-Auth-Token": fdKey },
+  });
+
+  if (!resp.ok) return {};
+
+  const data = await resp.json();
+  const teams = Array.isArray(data.teams) ? data.teams : [];
+  const map = {};
+  for (const t of teams) {
+    if (t.name && t.crest) {
+      map[t.name.toLowerCase()] = t.crest;
+    }
+    if (t.shortName && t.crest) {
+      map[t.shortName.toLowerCase()] = t.crest;
+    }
+    if (t.tla && t.crest) {
+      map[t.tla.toLowerCase()] = t.crest;
+    }
+  }
+
+  await env.WORLDCUP_KV.put(cacheKey, JSON.stringify({ data: map, timestamp: Date.now() }));
+  return map;
+}
+
+function normalizeMatches(apiMatches, crestMap = {}) {
   return apiMatches
     .map((m) => {
       const now = new Date();
@@ -71,10 +107,13 @@ function normalizeMatches(apiMatches) {
       const homeScore = m.score?.fullTime?.home;
       const awayScore = m.score?.fullTime?.away;
 
+      const homeTeam = m.homeTeam?.name || "TBD";
+      const awayTeam = m.awayTeam?.name || "TBD";
+
       return {
         id: m.id?.toString(),
-        homeTeam: m.homeTeam?.name || "TBD",
-        awayTeam: m.awayTeam?.name || "TBD",
+        homeTeam,
+        awayTeam,
         homeScore: homeScore !== null && homeScore !== undefined ? homeScore : null,
         awayScore: awayScore !== null && awayScore !== undefined ? awayScore : null,
         date: kickoff ? formatDate(kickoff) : null,
@@ -86,8 +125,8 @@ function normalizeMatches(apiMatches) {
         city: null,
         country: null,
         status,
-        homeBadge: null,
-        awayBadge: null,
+        homeBadge: crestMap[homeTeam.toLowerCase()] || crestMap[m.homeTeam?.shortName?.toLowerCase()] || null,
+        awayBadge: crestMap[awayTeam.toLowerCase()] || crestMap[m.awayTeam?.shortName?.toLowerCase()] || null,
         video: null,
         season: m.season?.id?.toString(),
       };
