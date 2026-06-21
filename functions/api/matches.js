@@ -112,8 +112,8 @@ function formatTime(d) {
 
 function extractGroup(m) {
   if (!m.group) return null;
-  // Football-Data returns "GROUP_A", "GROUP_B", etc.
-  const match = m.group.match(/GROUP_([A-H])/i);
+  // Football-Data returns "GROUP_A" or "GROUP A" format
+  const match = m.group.match(/GROUP[_\s]?([A-Z])/i);
   return match ? match[1].toUpperCase() : null;
 }
 

@@ -67,7 +67,12 @@ function normalizeStandings(data) {
     if (st.type !== "TOTAL" && st.type !== "HOME" && st.type !== "AWAY") continue;
     if (st.type !== "TOTAL") continue; // only TOTAL tables
 
-    const groupLabel = st.group?.replace(/^GROUP_/, "")?.toUpperCase() || (st.stage === "GROUP_STAGE" ? "A" : null);
+    let groupLabel = null;
+    if (st.group) {
+      const m = st.group.match(/GROUP[_\s]?([A-Z])/i);
+      groupLabel = m ? m[1].toUpperCase() : st.group.toUpperCase();
+    }
+    if (!groupLabel && st.stage === "GROUP_STAGE") groupLabel = "A";
     if (!groupLabel) continue;
 
     const rows = st.table || [];

@@ -8,5 +8,4 @@ binding = "WORLDCUP_KV"
 id = "550a9631d0ce4f33841281537994eae3"
 
 [vars]
-# Get free API key: https://www.football-data.org/client/register
-FOOTBALL_DATA_KEY = ""
+# API key set via Cloudflare Pages secret (FOOTBALL_DATA_KEY)

@@ -1,0 +1,37 @@
+{
+  "routes": [
+    {
+      "routePath": "/api/health",
+      "mountPath": "/api",
+      "method": "GET",
+      "module": [
+        "api/health.js:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/api/matches",
+      "mountPath": "/api",
+      "method": "GET",
+      "module": [
+        "api/matches.js:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/api/standings",
+      "mountPath": "/api",
+      "method": "GET",
+      "module": [
+        "api/standings.js:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/api/teams",
+      "mountPath": "/api",
+      "method": "GET",
+      "module": [
+        "api/teams.js:onRequestGet"
+      ]
+    }
+  ],
+  "baseURL": "/"
+}
