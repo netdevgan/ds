@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0a0a0f">
+
+  <title>World Cup 2026 Schedule, Results & Standings</title>
+  <meta name="description" content="Full World Cup 2026 schedule, latest match results, group standings, and team stats. Updated daily.">
+  <meta name="keywords" content="world cup 2026 schedule, world cup 2026 results, world cup 2026 standings, fifa world cup 2026, football scores">
+  <meta name="author" content="Digital Time">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+  <!-- Update canonical URL after deploy -->
+  <link rel="canonical" href="https://digitaltime.store/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://digitaltime.store/">
+  <meta property="og:title" content="World Cup 2026 Schedule, Results & Standings">
+  <meta property="og:description" content="Full World Cup 2026 schedule, latest results, group standings. Auto-updated.">
+  <meta property="og:image" content="https://digitaltime.store/og.jpg">
+  <meta property="og:locale" content="en_US">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="World Cup 2026 Schedule, Results & Standings">
+  <meta name="twitter:description" content="Full World Cup 2026 schedule, latest results, group standings. Auto-updated.">
+  <meta name="twitter:image" content="https://digitaltime.store/og.jpg">
+
+  <!-- Icons -->
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+
+  <!-- Preconnect -->
+  <link rel="preconnect" href="https://www.thesportsdb.com">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/assets/style.css">
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SportsEvent",
+    "name": "FIFA World Cup 2026",
+    "description": "Complete schedule, match results, and group standings for the FIFA World Cup 2026.",
+    "url": "https://digitaltime.store/",
+    "startDate": "2026-06-09",
+    "endDate": "2026-07-19",
+    "eventStatus": "https://schema.org/EventScheduled",
+    "eventAttendanceMode": "https://schema.org/MixedEventAttendanceMode",
+    "location": {
+      "@type": "Place",
+      "name": "North America",
+      "address": {
+        "@type": "PostalAddress",
+        "addressCountry": "US, CA, MX"
+      }
+    },
+    "organizer": {
+      "@type": "Organization",
+      "name": "FIFA"
+    }
+  }
+  </script>
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="/" class="brand" aria-label="Home">
+        <span class="brand-mark" aria-hidden="true">⚽</span>
+        <div class="brand-text">
+          <strong>DigitalTime</strong>
+          <span>World Cup 2026</span>
+        </div>
+      </a>
+      <nav class="main-nav" aria-label="Main navigation">
+        <a href="#schedule">Schedule</a>
+        <a href="#results">Results</a>
+        <a href="#standings">Standings</a>
+        <a href="#teams">Teams</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="container">
+        <div class="hero-content">
+          <p class="hero-kicker">FIFA World Cup 2026</p>
+          <h1 id="hero-title">Schedule, Results & Standings</h1>
+          <p class="hero-lead">Follow every match from group stage to final. Data auto-updated from official tournament sources.</p>
+          <div class="hero-meta">
+            <span class="pill">Jun 9 — Jul 19, 2026</span>
+            <span class="pill" id="live-count" aria-live="polite">Loading…</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="filters" aria-label="Filter matches">
+      <div class="container">
+        <div class="filter-bar" role="tablist" aria-label="Schedule tabs">
+          <button class="filter-btn active" data-filter="all" role="tab" aria-selected="true">All</button>
+          <button class="filter-btn" data-filter="live" role="tab" aria-selected="false">Live</button>
+          <button class="filter-btn" data-filter="upcoming" role="tab" aria-selected="false">Upcoming</button>
+          <button class="filter-btn" data-filter="finished" role="tab" aria-selected="false">Finished</button>
+        </div>
+        <div class="group-bar" aria-label="Filter by group">
+          <label for="group-select" class="sr-only">Select Group</label>
+          <select id="group-select">
+            <option value="">All Groups</option>
+            <option value="A">Group A</option>
+            <option value="B">Group B</option>
+            <option value="C">Group C</option>
+            <option value="D">Group D</option>
+            <option value="E">Group E</option>
+            <option value="F">Group F</option>
+            <option value="G">Group G</option>
+            <option value="H">Group H</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section id="schedule" class="schedule-section" aria-labelledby="schedule-title">
+      <div class="container">
+        <h2 id="schedule-title" class="section-title">Match Schedule</h2>
+        <div id="matches-container" class="matches-grid">
+          <p class="loading" aria-live="polite">Loading schedule…</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="results" class="results-section" aria-labelledby="results-title">
+      <div class="container">
+        <h2 id="results-title" class="section-title">Latest Results</h2>
+        <div id="results-container" class="matches-grid compact">
+          <p class="loading" aria-live="polite">Loading results…</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="standings" class="standings-section" aria-labelledby="standings-title">
+      <div class="container">
+        <h2 id="standings-title" class="section-title">Group Standings</h2>
+        <div id="standings-container" class="standings-grid">
+          <p class="loading" aria-live="polite">Loading standings…</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="teams" class="teams-section" aria-labelledby="teams-title">
+      <div class="container">
+        <h2 id="teams-title" class="section-title">Teams</h2>
+        <div id="teams-container" class="teams-grid">
+          <p class="loading" aria-live="polite">Loading teams…</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p><strong>DigitalTime World Cup 2026</strong></p>
+      <p>Match data sourced from TheSportsDB. Auto-updates every 30 minutes.</p>
+      <p class="footer-legal">This site provides match schedules and results only. No live streaming is available here.</p>
+    </div>
+  </footer>
+
+  <script src="/assets/app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+# Cloudflare Pages + Workers configuration
+# Replace KV namespace IDs after creating them in Cloudflare dashboard
+
+name = "digitaltime-worldcup"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Production KV namespace for caching match data
+[[kv_namespaces]]
+binding = "WORLDCUP_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_YOUR_PREVIEW_KV_NAMESPACE_ID"
+
+[vars]
+# Optional: override TheSportsDB API key (3 is the public demo key)
+TSDB_KEY = "3"
