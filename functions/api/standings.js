@@ -1,36 +1,35 @@
-const CACHE_TTL_SECONDS = 7200; // 2 hours
+const CACHE_TTL = 1800; // 30 min
 
 export async function onRequestGet(context) {
   const { env } = context;
   const url = new URL(context.request.url);
+  const competition = (url.searchParams.get("competition") || "WC").toUpperCase();
   const group = url.searchParams.get("group") || null;
 
   try {
-    const cacheKey = `standings_fd_wc2026_v1`;
+    const cacheKey = `standings_${competition}_v1`;
     const cached = await env.WORLDCUP_KV.get(cacheKey, { type: "json" });
     let standings;
     let fromCache = false;
 
-    if (cached && cached.timestamp && (Date.now() - cached.timestamp < CACHE_TTL_SECONDS * 1000)) {
+    if (cached && cached.timestamp && (Date.now() - cached.timestamp < CACHE_TTL * 1000)) {
       standings = cached.data;
       fromCache = true;
     } else {
       const fdKey = env.FOOTBALL_DATA_KEY;
-      if (!fdKey) {
-        throw new Error("Missing FOOTBALL_DATA_KEY env variable. Get free key at https://www.football-data.org/client/register");
-      }
+      if (!fdKey) throw new Error("Missing FOOTBALL_DATA_KEY");
 
-      const upstream = await fetch("https://api.football-data.org/v4/competitions/WC/standings", {
+      const resp = await fetch(`https://api.football-data.org/v4/competitions/${competition}/standings`, {
         headers: { "X-Auth-Token": fdKey },
       });
 
-      if (!upstream.ok) {
-        const errText = await upstream.text().catch(() => "");
-        throw new Error(`Football-Data.org API error (${upstream.status}): ${errText || upstream.statusText}`);
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => "");
+        throw new Error(`API error (${resp.status}): ${errText || resp.statusText}`);
       }
 
-      const data = await upstream.json();
-      standings = normalizeStandings(data);
+      const data = await resp.json();
+      standings = normalizeStandings(data, competition);
 
       await env.WORLDCUP_KV.put(
         cacheKey,
@@ -39,12 +38,11 @@ export async function onRequestGet(context) {
     }
 
     let result = standings;
-    if (group) {
-      result = standings.filter((s) => s.group === group.toUpperCase());
-    }
+    if (group) result = result.filter((s) => s.group === group.toUpperCase());
 
     return jsonResponse({
       success: true,
+      competition,
       group,
       total: result.length,
       cached: fromCache,
@@ -52,36 +50,31 @@ export async function onRequestGet(context) {
       data: result,
     });
   } catch (error) {
-    return jsonResponse(
-      { success: false, error: error.message },
-      500
-    );
+    return jsonResponse({ success: false, error: error.message }, 500);
   }
 }
 
-function normalizeStandings(data) {
+function normalizeStandings(data, competition) {
   const result = [];
-  const standings = data?.standings || [];
+  const st = data?.standings || [];
 
-  for (const st of standings) {
-    if (st.type !== "TOTAL" && st.type !== "HOME" && st.type !== "AWAY") continue;
-    if (st.type !== "TOTAL") continue; // only TOTAL tables
+  for (const s of st) {
+    if (s.type !== "TOTAL") continue;
 
     let groupLabel = null;
-    if (st.group) {
-      const m = st.group.match(/GROUP[_\s]?([A-Z])/i);
-      groupLabel = m ? m[1].toUpperCase() : st.group.toUpperCase();
+    if (s.group) {
+      const m = s.group.match(/GROUP[_\s]?([A-Z])/i);
+      groupLabel = m ? m[1].toUpperCase() : s.group.toUpperCase();
     }
-    if (!groupLabel && st.stage === "GROUP_STAGE") groupLabel = "A";
-    if (!groupLabel) continue;
 
-    const rows = st.table || [];
+    const rows = s.table || [];
     for (const row of rows) {
       result.push({
         rank: row.position,
         team: row.team?.name || "Unknown",
         teamBadge: row.team?.crest || null,
         group: groupLabel,
+        competition,
         played: row.playedGames,
         won: row.won,
         drawn: row.draw,
@@ -95,9 +88,8 @@ function normalizeStandings(data) {
     }
   }
 
-  // Sort by group name ASC, points DESC, GD DESC
   result.sort((a, b) => {
-    if (a.group !== b.group) return a.group.localeCompare(b.group);
+    if (a.group !== b.group) return (a.group || "").localeCompare(b.group || "");
     if (b.points !== a.points) return b.points - a.points;
     return b.goalDifference - a.goalDifference;
   });

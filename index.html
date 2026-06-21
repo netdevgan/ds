@@ -5,69 +5,53 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0a0a0f">
 
-  <title>World Cup 2026 Schedule, Results & Standings | FIFA World Cup</title>
-  <meta name="description" content="Complete World Cup 2026 schedule with live scores, match results, group standings, and team stats. Follow every FIFA World Cup 2026 match from group stage to final.">
-  <meta name="keywords" content="world cup 2026 schedule, world cup 2026 results, world cup 2026 standings, fifa world cup 2026, world cup 2026 matches, football world cup 2026, world cup 2026 groups, world cup scores today">
-  <meta name="news_keywords" content="World Cup 2026, FIFA World Cup, football, soccer, match results, standings">
+  <title>Football Schedule & Results | Live Scores, Standings & Stats</title>
+  <meta name="description" content="Follow live football scores, match schedules, league standings, and team stats from major competitions worldwide. Premier League, Champions League, La Liga, Serie A, and more.">
+  <meta name="keywords" content="football schedule, live scores, football results, premier league, champions league, la liga, serie a, bundesliga, ligue 1, world cup 2026">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
-  <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large">
-  <meta name="revised" content="2026-06-21T17:00:00Z">
-  <link rel="alternate" hreflang="en" href="https://worldcup.digitaltime.store/">
-  <meta name="author" content="Digital Time">
-  <!-- Update canonical URL after deploy -->
   <link rel="canonical" href="https://worldcup.digitaltime.store/">
+  <link rel="alternate" hreflang="en" href="https://worldcup.digitaltime.store/">
+  <meta name="google-site-verification" content="YJuqGAvuRx_tg44UvHczAZPlL8xk3QTacDDB8hXh-qE" />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://worldcup.digitaltime.store/">
-  <meta property="og:title" content="World Cup 2026 Schedule, Results & Standings">
-  <meta property="og:description" content="Full World Cup 2026 schedule, latest results, group standings. Auto-updated.">
-  <meta property="og:image" content="https://worldcup.digitaltime.store/og.jpg">
+  <meta property="og:title" content="Football Schedule & Results | Live Scores & Standings">
+  <meta property="og:description" content="Follow live football scores, match schedules, league standings from major competitions worldwide.">
   <meta property="og:locale" content="en_US">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="World Cup 2026 Schedule, Results & Standings">
-  <meta name="twitter:description" content="Full World Cup 2026 schedule, latest results, group standings. Auto-updated.">
-  <meta name="twitter:image" content="https://worldcup.digitaltime.store/og.jpg">
-
-  <!-- Icons -->
+  <meta name="twitter:title" content="Football Schedule & Results | Live Scores & Standings">
+  <meta name="twitter:description" content="Follow live football scores, match schedules, league standings from major competitions worldwide.">
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-
-  <!-- Preconnect -->
   <link rel="preconnect" href="https://api.football-data.org">
   <link rel="preconnect" href="https://pl29833704.effectivecpmnetwork.com">
 
   <!-- Adsterra Popunder -->
   <script type="text/javascript" data-cfasync="false" src="https://pl29833704.effectivecpmnetwork.com/80/c5/b3/80c5b35d63aa2ad34899fdc7fbd01ca7.js" async></script>
 
-  <!-- Styles -->
   <link rel="stylesheet" href="/assets/style.css">
 
-  <!-- JSON-LD Structured Data -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "SportsEvent",
-    "name": "FIFA World Cup 2026",
-    "description": "Complete schedule, match results, and group standings for the FIFA World Cup 2026.",
+    "@type": "WebSite",
+    "name": "Football Schedule & Results",
     "url": "https://worldcup.digitaltime.store/",
-    "startDate": "2026-06-09",
-    "endDate": "2026-07-19",
-    "eventStatus": "https://schema.org/EventScheduled",
-    "eventAttendanceMode": "https://schema.org/MixedEventAttendanceMode",
-    "location": {
-      "@type": "Place",
-      "name": "North America",
-      "address": {
-        "@type": "PostalAddress",
-        "addressCountry": "US, CA, MX"
-      }
-    },
-    "organizer": {
-      "@type": "Organization",
-      "name": "FIFA"
-    }
+    "description": "Live football scores, match schedules, league standings, and team stats from competitions worldwide."
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [{
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": "https://worldcup.digitaltime.store/"
+    }]
   }
   </script>
 </head>
@@ -80,7 +64,7 @@
         <span class="brand-mark" aria-hidden="true">⚽</span>
         <div class="brand-text">
           <strong>DigitalTime</strong>
-          <span>World Cup 2026</span>
+          <span>Football</span>
         </div>
       </a>
       <nav class="main-nav" aria-label="Main navigation">
@@ -96,13 +80,22 @@
     <section class="hero" aria-labelledby="hero-title">
       <div class="container">
         <div class="hero-content">
-          <p class="hero-kicker">FIFA World Cup 2026</p>
-          <h1 id="hero-title">Schedule, Results & Standings</h1>
-          <p class="hero-lead">Follow every match from group stage to final. Data auto-updated from official tournament sources.</p>
+          <p class="hero-kicker" id="hero-kicker">Select a competition</p>
+          <h1 id="hero-title">Football Schedule & Results</h1>
+          <p class="hero-lead" id="hero-lead">Follow every match from major competitions around the world.</p>
           <div class="hero-meta">
-            <span class="pill">Jun 9 — Jul 19, 2026</span>
+            <span class="pill" id="comp-season">Loading…</span>
             <span class="pill" id="live-count" aria-live="polite">Loading…</span>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Competition Selector -->
+    <section class="comp-bar" aria-label="Select competition">
+      <div class="container">
+        <div class="comp-scroll" id="comp-list" role="tablist" aria-label="Competitions">
+          <p class="loading">Loading leagues…</p>
         </div>
       </div>
     </section>
@@ -117,29 +110,11 @@
 
     <section class="filters" aria-label="Filter matches">
       <div class="container">
-        <div class="filter-bar" role="tablist" aria-label="Schedule tabs">
+        <div class="filter-bar" role="tablist" aria-label="Filter tabs">
           <button class="filter-btn active" data-filter="all" role="tab" aria-selected="true">All</button>
           <button class="filter-btn" data-filter="live" role="tab" aria-selected="false">Live</button>
           <button class="filter-btn" data-filter="upcoming" role="tab" aria-selected="false">Upcoming</button>
           <button class="filter-btn" data-filter="finished" role="tab" aria-selected="false">Finished</button>
-        </div>
-        <div class="group-bar" aria-label="Filter by group">
-          <label for="group-select" class="sr-only">Select Group</label>
-          <select id="group-select">
-            <option value="">All Groups</option>
-            <option value="A">Group A</option>
-            <option value="B">Group B</option>
-            <option value="C">Group C</option>
-            <option value="D">Group D</option>
-            <option value="E">Group E</option>
-            <option value="F">Group F</option>
-            <option value="G">Group G</option>
-            <option value="H">Group H</option>
-            <option value="I">Group I</option>
-            <option value="J">Group J</option>
-            <option value="K">Group K</option>
-            <option value="L">Group L</option>
-          </select>
         </div>
       </div>
     </section>
@@ -148,7 +123,7 @@
       <div class="container">
         <h2 id="schedule-title" class="section-title">Match Schedule</h2>
         <div id="matches-container" class="matches-grid">
-          <p class="loading" aria-live="polite">Loading schedule…</p>
+          <p class="loading">Loading schedule…</p>
         </div>
       </div>
     </section>
@@ -157,16 +132,16 @@
       <div class="container">
         <h2 id="results-title" class="section-title">Latest Results</h2>
         <div id="results-container" class="matches-grid compact">
-          <p class="loading" aria-live="polite">Loading results…</p>
+          <p class="loading">Loading results…</p>
         </div>
       </div>
     </section>
 
     <section id="standings" class="standings-section" aria-labelledby="standings-title">
       <div class="container">
-        <h2 id="standings-title" class="section-title">Group Standings</h2>
+        <h2 id="standings-title" class="section-title">Standings</h2>
         <div id="standings-container" class="standings-grid">
-          <p class="loading" aria-live="polite">Loading standings…</p>
+          <p class="loading">Loading standings…</p>
         </div>
       </div>
     </section>
@@ -175,7 +150,7 @@
       <div class="container">
         <h2 id="teams-title" class="section-title">Teams</h2>
         <div id="teams-container" class="teams-grid">
-          <p class="loading" aria-live="polite">Loading teams…</p>
+          <p class="loading">Loading teams…</p>
         </div>
       </div>
     </section>
@@ -183,12 +158,13 @@
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <p><strong>DigitalTime World Cup 2026</strong></p>
-      <p>Match data sourced from Football-Data.org. Auto-updates every 30 minutes.</p>
+      <p><strong>DigitalTime Football</strong></p>
+      <p>Match data sourced from Football-Data.org.</p>
       <p class="footer-legal">This site provides match schedules and results only. No live streaming is available here.</p>
     </div>
   </footer>
 
+  <script id="inline-data" type="application/json">{}</script>
   <script src="/assets/app.js" defer></script>
 </body>
 </html>

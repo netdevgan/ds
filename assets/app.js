@@ -1,292 +1,348 @@
-(function () {
-  'use strict';
+const STATE = {
+  competitions: [],
+  selectedCode: null,
+  currentFilter: 'all',
+  matches: [],
+  standings: [],
+  teams: [],
+  refreshTimer: null,
+};
 
-  // ── State ──
-  const state = {
-    allMatches: [],
-    standings: null,
-    teams: [],
-    filter: 'all',
-    group: '',
-    refreshInterval: null,
-  };
+async function fetchJSON(url) {
+  const resp = await fetch(url);
+  return resp.json();
+}
 
-  // ── DOM ──
-  const $ = (s, ctx = document) => ctx.querySelector(s);
-  const $$ = (s, ctx = document) => [...ctx.querySelectorAll(s)];
-
-  const els = {
-    matches: $('#matches-container'),
-    results: $('#results-container'),
-    standings: $('#standings-container'),
-    teams: $('#teams-container'),
-    filterBtns: $$('.filter-btn'),
-    groupSelect: $('#group-select'),
-    liveCount: $('#live-count'),
-  };
-
-  // ── Helpers ──
-  function isoToDisplay(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    const opts = { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' };
-    return d.toLocaleDateString('en-US', opts);
+/* ── Competition Loading ── */
+async function loadCompetitions() {
+  const compList = document.getElementById('comp-list');
+  try {
+    const result = await fetchJSON('/api/competitions');
+    if (!result.success) throw new Error(result.error || 'Failed to load competitions');
+    STATE.competitions = result.data || [];
+    renderCompetitionBar(STATE.competitions);
+    const first = STATE.competitions[0];
+    if (first) selectCompetition(first.code);
+  } catch (err) {
+    compList.innerHTML = `<p class="error">${err.message}</p>`;
   }
+}
 
-  function countdown(dateIso) {
-    const diff = new Date(dateIso) - Date.now();
-    if (diff <= 0) return '';
-    const h = Math.floor(diff / 3600000);
-    const m = Math.floor((diff % 3600000) / 60000);
-    if (h > 24) {
-      const d = Math.floor(h / 24);
-      return `${d}d left`;
+function renderCompetitionBar(competitions) {
+  const list = document.getElementById('comp-list');
+  list.innerHTML = competitions.map(c => `
+    <button class="comp-item" data-code="${c.code}" role="tab" aria-selected="false">
+      ${c.emblem ? `<img src="${c.emblem}" alt="" class="comp-emblem" loading="lazy">` : `<span class="comp-emblem comp-emblem-fallback">${c.code.slice(0, 2)}</span>`}
+      <span class="comp-name">${c.name}</span>
+      <span class="comp-area">${c.area || ''}</span>
+    </button>
+  `).join('');
+}
+
+/* ── Competition Selection ── */
+function selectCompetition(code) {
+  if (STATE.selectedCode === code) return;
+  STATE.selectedCode = code;
+
+  document.querySelectorAll('.comp-item').forEach(el => {
+    const sel = el.dataset.code === code;
+    el.classList.toggle('active', sel);
+    el.setAttribute('aria-selected', sel);
+  });
+
+  const comp = STATE.competitions.find(c => c.code === code);
+  if (comp) {
+    const heroTitle = document.getElementById('hero-title');
+    const heroKicker = document.getElementById('hero-kicker');
+    const heroLead = document.getElementById('hero-lead');
+    const compSeason = document.getElementById('comp-season');
+
+    heroTitle.textContent = comp.name;
+    heroKicker.textContent = `${comp.area || 'International'} • ${comp.type || 'Competition'}`;
+
+    const hero = document.querySelector('.hero');
+    if (comp.emblem) {
+      hero.style.setProperty('--hero-emblem', `url(${comp.emblem})`);
+    } else {
+      hero.style.setProperty('--hero-emblem', 'none');
     }
-    return `${h}h ${m}m left`;
-  }
 
-  function getStatusClass(status) {
-    return status === 'live' ? 'live' : status === 'upcoming' ? 'upcoming' : 'finished';
-  }
-
-  function badgeImg(src, alt, cls = 'team-badge') {
-    if (!src) {
-      return `<span class="${cls}" aria-hidden="true" style="display:grid;place-items:center;font-size:1.25rem">🏳️</span>`;
+    if (comp.currentSeason) {
+      compSeason.textContent = `${comp.currentSeason} Season`;
+    } else {
+      compSeason.textContent = code;
     }
-    return `<img class="${cls}" src="${src}" alt="${alt}" loading="lazy" onerror="this.outerHTML='<span class=\\'${cls}\\' aria-hidden=\\'true\\' style=\\'display:grid;place-items:center;font-size:1.25rem\\'>🏳️</span>'">`;
   }
 
-  function groupByGroup(items) {
-    const map = {};
-    items.forEach(item => {
-      const g = item.group || 'Other';
-      if (!map[g]) map[g] = [];
-      map[g].push(item);
-    });
-    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+  loadAllData(code);
+}
+
+/* ── Data Loading ── */
+async function loadAllData(code) {
+  const filter = STATE.currentFilter;
+  const [matchesResult, standingsResult, teamsResult] = await Promise.all([
+    fetchJSON(`/api/matches?competition=${code}&filter=${filter}`),
+    fetchJSON(`/api/standings?competition=${code}`),
+    fetchJSON(`/api/teams?competition=${code}`),
+  ]);
+
+  if (matchesResult.success) STATE.matches = matchesResult.data || [];
+  if (standingsResult.success) STATE.standings = standingsResult.data || [];
+  if (teamsResult.success) STATE.teams = teamsResult.data || [];
+
+  renderMatches(code, filter);
+  renderStandings();
+  renderTeams();
+  updateLiveCount();
+  startAutoRefresh(code);
+}
+
+function startAutoRefresh(code) {
+  if (STATE.refreshTimer) clearInterval(STATE.refreshTimer);
+  STATE.refreshTimer = setInterval(() => {
+    const filter = STATE.currentFilter;
+    fetchJSON(`/api/matches?competition=${code}&filter=${filter}`)
+      .then(result => {
+        if (result.success) STATE.matches = result.data || [];
+        renderMatches(code, filter);
+        updateLiveCount();
+      })
+      .catch(() => {});
+  }, 60000);
+}
+
+/* ── Match Rendering ── */
+function renderMatches(code, filter) {
+  const container = document.getElementById('matches-container');
+  const resultsContainer = document.getElementById('results-container');
+
+  if (!STATE.matches.length) {
+    const empty = '<p class="no-data">No matches found.</p>';
+    container.innerHTML = empty;
+    resultsContainer.innerHTML = empty;
+    return;
   }
 
-  // ── Renderers ──
-  function renderMatchCard(m) {
-    const statusClass = getStatusClass(m.status);
-    const isLive = m.status === 'live';
-    const isUpcoming = m.status === 'upcoming';
+  const scheduleMatches = STATE.matches.filter(m => m.status === 'upcoming' || m.status === 'live');
+  const finishedMatches = STATE.matches.filter(m => m.status === 'finished');
 
-    return `<article class="match-card ${statusClass}">
-      <div class="match-meta">
-        <span>${m.group ? `Group ${m.group}` : m.round || ''}</span>
-        <span class="match-status ${statusClass}">
-          ${isLive ? '<span class="match-status-dot"></span>LIVE' : ''}
-          ${isUpcoming ? '<span class="match-status-dot"></span>Upcoming' : ''}
-          ${m.status === 'finished' ? '<span class="match-status-dot"></span>Finished' : ''}
-        </span>
+  container.innerHTML = scheduleMatches.length
+    ? scheduleMatches.map(m => renderMatchCard(m, code)).join('')
+    : '<p class="no-data">No upcoming matches.</p>';
+
+  resultsContainer.innerHTML = finishedMatches.length
+    ? finishedMatches.slice(0, 10).map(m => renderMatchCard(m, code)).join('')
+    : '<p class="no-data">No results yet.</p>';
+}
+
+function renderMatchCard(m) {
+  const isLive = m.status === 'live';
+  const scoreDisplay = m.homeScore !== null && m.awayScore !== null
+    ? `<span class="ms-score">${m.homeScore} &ndash; ${m.awayScore}</span>`
+    : `<span class="ms-time">${m.timeLocal ? m.timeLocal.slice(0, 5) : m.date || 'TBD'}</span>`;
+
+  return `
+    <div class="match-card ${isLive ? 'match-live' : ''}">
+      <div class="match-header">
+        <span class="match-competition">${m.competition}</span>
+        <span class="match-round">${m.round || m.stage || ''}</span>
+        ${isLive ? '<span class="match-live-badge">LIVE</span>' : ''}
       </div>
       <div class="match-teams">
-        <div class="team">
-          ${badgeImg(m.homeBadge, m.homeTeam)}
+        <div class="team home">
+          ${m.homeBadge ? `<img src="${m.homeBadge}" alt="" class="team-badge" loading="lazy">` : ''}
           <span class="team-name">${m.homeTeam}</span>
         </div>
         <div class="match-center">
-          ${m.homeScore !== null && m.awayScore !== null
-            ? `<span class="match-score">${m.homeScore}–${m.awayScore}</span>`
-            : `<span class="match-time">${isoToDisplay(m.datetimeUtc)}</span>`
-          }
-          ${isUpcoming ? `<span class="match-countdown" data-countdown="${m.datetimeUtc}">${countdown(m.datetimeUtc)}</span>` : ''}
+          ${scoreDisplay}
+          ${m.group ? `<span class="match-group">Group ${m.group}</span>` : ''}
         </div>
-        <div class="team">
-          ${badgeImg(m.awayBadge, m.awayTeam)}
+        <div class="team away">
+          ${m.awayBadge ? `<img src="${m.awayBadge}" alt="" class="team-badge" loading="lazy">` : ''}
           <span class="team-name">${m.awayTeam}</span>
         </div>
       </div>
-      ${m.venue ? `<div class="match-venue">${m.venue}${m.city ? ', ' + m.city : ''}</div>` : ''}
-    </article>`;
-  }
-
-  function renderMatches(container, matches, emptyMsg) {
-    if (!matches || matches.length === 0) {
-      container.innerHTML = `<p class="empty-state">${emptyMsg || 'No matches found'}</p>`;
-      return;
-    }
-    container.innerHTML = matches.map(renderMatchCard).join('');
-  }
-
-  function renderStandings(standings) {
-    const grouped = groupByGroup(standings);
-    if (grouped.length === 0) {
-      els.standings.innerHTML = '<p class="empty-state">Standings not available yet</p>';
-      return;
-    }
-    els.standings.innerHTML = grouped.map(([group, rows]) => `
-      <div class="group-table">
-        <h3 class="group-title">Group ${group}</h3>
-        <div class="table-wrap">
-          <table class="table-standings">
-            <thead>
-              <tr>
-                <th>Team</th>
-                <th title="Played">P</th>
-                <th title="Won">W</th>
-                <th title="Drawn">D</th>
-                <th title="Lost">L</th>
-                <th title="Goals">GF:GA</th>
-                <th title="Goal Difference">GD</th>
-                <th title="Points">Pts</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows.map(r => `<tr>
-                <td>
-                  <div class="standing-team">
-                    ${badgeImg(r.teamBadge, r.team, 'standing-badge')}
-                    <span class="standing-name">${r.team}</span>
-                  </div>
-                </td>
-                <td>${r.played}</td>
-                <td>${r.won}</td>
-                <td>${r.drawn}</td>
-                <td>${r.lost}</td>
-                <td>${r.goalsFor}:${r.goalsAgainst}</td>
-                <td>${r.goalDifference > 0 ? '+' : ''}${r.goalDifference}</td>
-                <td class="points">${r.points}</td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
+      <div class="match-footer">
+        <span>${m.date || ''} ${m.timeLocal ? m.timeLocal.slice(0, 5) : ''}</span>
+        <span>${m.venue || ''}</span>
       </div>
-    `).join('');
+    </div>
+  `;
+}
+
+/* ── Standings Rendering ── */
+function renderStandings() {
+  const container = document.getElementById('standings-container');
+  if (!STATE.standings.length) {
+    container.innerHTML = '<p class="no-data">No standings available.</p>';
+    return;
   }
 
-  function renderTeams(teams) {
-    if (!teams || teams.length === 0) {
-      els.teams.innerHTML = '<p class="empty-state">Team data not available</p>';
-      return;
-    }
-    els.teams.innerHTML = teams.map(t => `
-      <article class="team-card">
-        ${badgeImg(t.badge, t.name)}
-        <span>${t.name}</span>
-      </article>
-    `).join('');
+  const groups = groupBy(STATE.standings, 'group');
+  container.innerHTML = Object.entries(groups).map(([group, rows]) => `
+    <div class="standings-group">
+      <h3 class="standings-group-title">${group || 'Table'}</h3>
+      <table class="standings-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Team</th>
+            <th>P</th>
+            <th>W</th>
+            <th>D</th>
+            <th>L</th>
+            <th>GF</th>
+            <th>GA</th>
+            <th>GD</th>
+            <th>Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(row => `
+            <tr class="${row.rank <= 4 ? 'qualifying' : ''}">
+              <td class="pos">${row.rank}</td>
+              <td class="team-cell">
+                ${row.teamBadge ? `<img src="${row.teamBadge}" alt="" class="team-badge" loading="lazy">` : ''}
+                <span>${row.team}</span>
+                ${row.form ? `<span class="form-strip">${renderForm(row.form)}</span>` : ''}
+              </td>
+              <td>${row.played}</td>
+              <td>${row.won}</td>
+              <td>${row.drawn}</td>
+              <td>${row.lost}</td>
+              <td>${row.goalsFor}</td>
+              <td>${row.goalsAgainst}</td>
+              <td>${row.goalDifference}</td>
+              <td class="pts"><strong>${row.points}</strong></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `).join('');
+}
+
+function renderForm(form) {
+  return (form || '').split(',').slice(0, 5).map(r => {
+    const ch = r.trim().toUpperCase();
+    if (ch === 'W') return '<span class="form-w">W</span>';
+    if (ch === 'D') return '<span class="form-d">D</span>';
+    if (ch === 'L') return '<span class="form-l">L</span>';
+    return '';
+  }).join('');
+}
+
+/* ── Teams Rendering ── */
+function renderTeams() {
+  const container = document.getElementById('teams-container');
+  if (!STATE.teams.length) {
+    container.innerHTML = '<p class="no-data">No teams available.</p>';
+    return;
   }
 
-  // ── Data fetching ──
-  async function fetchJSON(url) {
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const json = await resp.json();
-    if (!json.success) throw new Error(json.error || 'API error');
-    return json;
+  container.innerHTML = STATE.teams.map(t => `
+    <div class="team-card">
+      ${t.badge ? `<img src="${t.badge}" alt="" class="team-badge large" loading="lazy">` : '<div class="team-badge-placeholder">?</div>'}
+      <div class="team-card-info">
+        <strong>${t.name}</strong>
+        <span>${t.country || ''}</span>
+        <span>${t.venue || ''}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ── Helpers ── */
+function groupBy(arr, key) {
+  return arr.reduce((acc, item) => {
+    const k = item[key] || '__ungrouped';
+    if (!acc[k]) acc[k] = [];
+    acc[k].push(item);
+    return acc;
+  }, {});
+}
+
+function updateLiveCount() {
+  const live = STATE.matches.filter(m => m.status === 'live').length;
+  const el = document.getElementById('live-count');
+  if (live > 0) {
+    el.textContent = `${live} live now`;
+    el.classList.add('live-pulse');
+  } else {
+    el.textContent = 'No live matches';
+    el.classList.remove('live-pulse');
   }
+}
 
-  async function loadMatches() {
-    try {
-      const params = new URLSearchParams({ filter: state.filter });
-      if (state.group) params.set('group', state.group);
-      const url = `/api/matches?${params}`;
-      const json = await fetchJSON(url);
-      state.allMatches = json.data || [];
+/* ── Event Binding ── */
+function bindEvents() {
+  document.getElementById('comp-list').addEventListener('click', e => {
+    const item = e.target.closest('.comp-item');
+    if (item) selectCompetition(item.dataset.code);
+  });
 
-      renderMatches(els.matches, state.allMatches, 'No matches found');
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn').forEach(b => {
+        b.classList.remove('active');
+        b.setAttribute('aria-selected', 'false');
+      });
+      btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
+      STATE.currentFilter = btn.dataset.filter;
 
-      const finished = state.allMatches.filter(m => m.status === 'finished').slice(0, 12);
-      renderMatches(els.results, finished, 'No finished matches yet');
-
-      const live = state.allMatches.filter(m => m.status === 'live');
-      if (live.length > 0) {
-        els.liveCount.textContent = `${live.length} match${live.length > 1 ? 'es' : ''} live`;
-        els.liveCount.classList.add('pill-live');
-      } else {
-        els.liveCount.textContent = 'No live matches';
-        els.liveCount.classList.remove('pill-live');
+      const code = STATE.selectedCode;
+      if (code) {
+        loadAllData(code);
       }
+    });
+  });
+}
 
-      startCountdownTimer();
-    } catch (err) {
-      els.matches.innerHTML = `<p class="error-message">Failed to load schedule: ${err.message}</p>`;
-      els.results.innerHTML = '';
+/* ── Inline Data ── */
+function tryUseInlineData() {
+  const el = document.getElementById('inline-data');
+  if (!el) return false;
+  try {
+    const data = JSON.parse(el.textContent || el.innerText || '{}');
+    if (data.competitions && data.competitions.length) {
+      STATE.competitions = data.competitions;
+      renderCompetitionBar(STATE.competitions);
+      if (data.matches) STATE.matches = data.matches;
+      if (data.standings) STATE.standings = data.standings;
+      if (data.teams) STATE.teams = data.teams;
+      if (data.selectedCode) STATE.selectedCode = data.selectedCode;
+      return true;
     }
-  }
+  } catch {}
+  return false;
+}
 
-  async function loadStandings() {
-    try {
-      const json = await fetchJSON('/api/standings');
-      state.standings = json.data || [];
-      renderStandings(state.standings);
-    } catch (err) {
-      els.standings.innerHTML = `<p class="error-message">Failed to load standings: ${err.message}</p>`;
-    }
-  }
-
-  async function loadTeams() {
-    try {
-      const json = await fetchJSON('/api/teams');
-      state.teams = json.data || [];
-      renderTeams(state.teams);
-    } catch (err) {
-      els.teams.innerHTML = `<p class="error-message">Failed to load teams: ${err.message}</p>`;
-    }
-  }
-
-  // ── Countdown timer ──
-  let countdownInterval = null;
-
-  function startCountdownTimer() {
-    if (countdownInterval) clearInterval(countdownInterval);
-    const updaters = () => {
-      $$('[data-countdown]').forEach(el => {
-        const iso = el.getAttribute('data-countdown');
-        if (iso) el.textContent = countdown(iso);
+/* ── Init ── */
+document.addEventListener('DOMContentLoaded', () => {
+  bindEvents();
+  if (!tryUseInlineData()) {
+    loadCompetitions();
+  } else {
+    const code = STATE.selectedCode || (STATE.competitions[0] && STATE.competitions[0].code);
+    if (code) {
+      document.querySelectorAll('.comp-item').forEach(el => {
+        const sel = el.dataset.code === code;
+        el.classList.toggle('active', sel);
+        el.setAttribute('aria-selected', sel);
       });
-    };
-    updaters();
-    countdownInterval = setInterval(updaters, 30000);
+      const comp = STATE.competitions.find(c => c.code === code);
+      if (comp) {
+        document.getElementById('hero-title').textContent = comp.name;
+        document.getElementById('hero-kicker').textContent = `${comp.area || 'International'} • ${comp.type || 'Competition'}`;
+        if (comp.currentSeason) document.getElementById('comp-season').textContent = `${comp.currentSeason} Season`;
+        if (comp.emblem) document.querySelector('.hero').style.setProperty('--hero-emblem', `url(${comp.emblem})`);
+      }
+      renderMatches(code, STATE.currentFilter);
+      renderStandings();
+      renderTeams();
+      updateLiveCount();
+      startAutoRefresh(code);
+    }
   }
-
-  // ── Filter / Group actions ──
-  function setFilter(filter) {
-    state.filter = filter;
-    els.filterBtns.forEach(b => {
-      const match = b.getAttribute('data-filter') === filter;
-      b.classList.toggle('active', match);
-      b.setAttribute('aria-selected', match);
-    });
-    loadMatches();
-  }
-
-  function setGroup(group) {
-    state.group = group;
-    loadMatches();
-  }
-
-  // ── Bind events ──
-  function initEvents() {
-    els.filterBtns.forEach(b => {
-      b.addEventListener('click', () => {
-        const f = b.getAttribute('data-filter');
-        setFilter(f);
-      });
-    });
-
-    els.groupSelect.addEventListener('change', e => {
-      setGroup(e.target.value);
-    });
-  }
-
-  // ── Auto-refresh every 5 minutes ──
-  function startAutoRefresh() {
-    if (state.refreshInterval) clearInterval(state.refreshInterval);
-    state.refreshInterval = setInterval(() => {
-      loadMatches();
-      loadStandings();
-    }, 300000);
-  }
-
-  // ── Init ──
-  async function init() {
-    initEvents();
-    await Promise.all([loadMatches(), loadStandings(), loadTeams()]);
-    startAutoRefresh();
-  }
-
-  document.addEventListener('DOMContentLoaded', init);
-})();
+});

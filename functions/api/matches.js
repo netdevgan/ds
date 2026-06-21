@@ -1,45 +1,42 @@
 const FD_BASE = "https://api.football-data.org/v4";
-const FD_TTL_SECONDS = 1800; // 30 min
-const CACHE_TTL_SECONDS = 1800;
+const CACHE_TTL = 600; // 10 min per competition
 
 export async function onRequestGet(context) {
   const { env, request } = context;
   const url = new URL(request.url);
+  const competition = (url.searchParams.get("competition") || "WC").toUpperCase();
   const filter = url.searchParams.get("filter") || "all";
   const group = url.searchParams.get("group") || null;
 
   try {
-    const cacheKey = `matches_fd_wc2026_v1`;
+    const cacheKey = `matches_${competition}_v1`;
     const cached = await env.WORLDCUP_KV.get(cacheKey, { type: "json" });
+
     let matches;
     let fromCache = false;
 
-    if (cached && cached.timestamp && (Date.now() - cached.timestamp < CACHE_TTL_SECONDS * 1000)) {
+    if (cached && cached.timestamp && (Date.now() - cached.timestamp < CACHE_TTL * 1000)) {
       matches = cached.data;
       fromCache = true;
     } else {
       const fdKey = env.FOOTBALL_DATA_KEY;
       if (!fdKey) {
-        throw new Error("Missing FOOTBALL_DATA_KEY env variable. Get free key at https://www.football-data.org/client/register");
+        throw new Error("Missing FOOTBALL_DATA_KEY");
       }
 
-      // Fetch matches
-      const matchesResp = await fetch(`${FD_BASE}/competitions/WC/matches`, {
+      const matchesResp = await fetch(`${FD_BASE}/competitions/${competition}/matches`, {
         headers: { "X-Auth-Token": fdKey },
       });
 
       if (!matchesResp.ok) {
         const errText = await matchesResp.text().catch(() => "");
-        throw new Error(`Football-Data.org API error (${matchesResp.status}): ${errText || matchesResp.statusText}`);
+        throw new Error(`API error (${matchesResp.status}): ${errText || matchesResp.statusText}`);
       }
 
-      const matchesData = await matchesResp.json();
-      const apiMatches = Array.isArray(matchesData.matches) ? matchesData.matches : [];
-
-      // Fetch team crests for badges
-      const crestMap = await fetchTeamCrests(env, fdKey);
-
-      matches = normalizeMatches(apiMatches, crestMap);
+      const data = await matchesResp.json();
+      const apiMatches = Array.isArray(data.matches) ? data.matches : [];
+      const crestMap = await fetchTeamCrests(env, fdKey, competition);
+      matches = normalizeMatches(apiMatches, crestMap, competition);
 
       await env.WORLDCUP_KV.put(
         cacheKey,
@@ -51,6 +48,7 @@ export async function onRequestGet(context) {
 
     return jsonResponse({
       success: true,
+      competition,
       filter,
       group,
       total: filtered.length,
@@ -59,46 +57,42 @@ export async function onRequestGet(context) {
       data: filtered,
     });
   } catch (error) {
-    return jsonResponse(
-      { success: false, error: error.message },
-      500
-    );
+    return jsonResponse({ success: false, error: error.message }, 500);
   }
 }
 
-async function fetchTeamCrests(env, fdKey) {
-  const cacheKey = "fd_crest_map_v1";
+async function fetchTeamCrests(env, fdKey, competition) {
+  const cacheKey = `crests_${competition}_v1`;
   const cached = await env.WORLDCUP_KV.get(cacheKey, { type: "json" });
   if (cached && cached.timestamp && (Date.now() - cached.timestamp < 86400000)) {
     return cached.data;
   }
 
-  const resp = await fetch(`${FD_BASE}/competitions/WC/teams`, {
-    headers: { "X-Auth-Token": fdKey },
-  });
+  try {
+    const resp = await fetch(`${FD_BASE}/competitions/${competition}/teams`, {
+      headers: { "X-Auth-Token": fdKey },
+    });
+    if (!resp.ok) return {};
 
-  if (!resp.ok) return {};
+    const data = await resp.json();
+    const teams = Array.isArray(data.teams) ? data.teams : [];
+    const map = {};
+    for (const t of teams) {
+      const crest = t.crest;
+      if (!crest) continue;
+      if (t.name) map[t.name.toLowerCase()] = crest;
+      if (t.shortName) map[t.shortName.toLowerCase()] = crest;
+      if (t.tla) map[t.tla.toLowerCase()] = crest;
+    }
 
-  const data = await resp.json();
-  const teams = Array.isArray(data.teams) ? data.teams : [];
-  const map = {};
-  for (const t of teams) {
-    if (t.name && t.crest) {
-      map[t.name.toLowerCase()] = t.crest;
-    }
-    if (t.shortName && t.crest) {
-      map[t.shortName.toLowerCase()] = t.crest;
-    }
-    if (t.tla && t.crest) {
-      map[t.tla.toLowerCase()] = t.crest;
-    }
+    await env.WORLDCUP_KV.put(cacheKey, JSON.stringify({ data: map, timestamp: Date.now() }));
+    return map;
+  } catch {
+    return {};
   }
-
-  await env.WORLDCUP_KV.put(cacheKey, JSON.stringify({ data: map, timestamp: Date.now() }));
-  return map;
 }
 
-function normalizeMatches(apiMatches, crestMap = {}) {
+function normalizeMatches(apiMatches, crestMap = {}, competition = "WC") {
   return apiMatches
     .map((m) => {
       const now = new Date();
@@ -106,12 +100,12 @@ function normalizeMatches(apiMatches, crestMap = {}) {
       const status = inferStatus(m, kickoff, now);
       const homeScore = m.score?.fullTime?.home;
       const awayScore = m.score?.fullTime?.away;
-
       const homeTeam = m.homeTeam?.name || "TBD";
       const awayTeam = m.awayTeam?.name || "TBD";
 
       return {
         id: m.id?.toString(),
+        competition,
         homeTeam,
         awayTeam,
         homeScore: homeScore !== null && homeScore !== undefined ? homeScore : null,
@@ -124,10 +118,10 @@ function normalizeMatches(apiMatches, crestMap = {}) {
         venue: m.venue || null,
         city: null,
         country: null,
+        stage: m.stage || null,
         status,
         homeBadge: crestMap[homeTeam.toLowerCase()] || crestMap[m.homeTeam?.shortName?.toLowerCase()] || null,
         awayBadge: crestMap[awayTeam.toLowerCase()] || crestMap[m.awayTeam?.shortName?.toLowerCase()] || null,
-        video: null,
         season: m.season?.id?.toString(),
       };
     })
@@ -151,18 +145,15 @@ function formatTime(d) {
 
 function extractGroup(m) {
   if (!m.group) return null;
-  // Football-Data returns "GROUP_A" or "GROUP A" format
   const match = m.group.match(/GROUP[_\s]?([A-Z])/i);
   return match ? match[1].toUpperCase() : null;
 }
 
 function inferStatus(m, kickoff, now) {
-  // Football-Data statuses: SCHEDULED, TIMED, IN_PLAY, PAUSED, FINISHED, POSTPONED, CANCELLED, AWARDED
   const s = (m.status || "").toUpperCase();
-
   if (s === "FINISHED" || s === "AWARDED") return "finished";
   if (s === "IN_PLAY" || s === "PAUSED") return "live";
-  if (s === "POSTPONED" || s === "CANCELLED") return "finished"; // treat as finished for UI
+  if (s === "POSTPONED" || s === "CANCELLED") return "finished";
   if (s === "SCHEDULED" || s === "TIMED") {
     if (!kickoff) return "upcoming";
     const diffMin = (now - kickoff) / 60000;
@@ -174,19 +165,10 @@ function inferStatus(m, kickoff, now) {
 
 function applyFilter(matches, filter, group) {
   let result = matches;
-
-  if (group) {
-    result = result.filter((m) => m.group === group.toUpperCase());
-  }
-
-  if (filter === "upcoming") {
-    result = result.filter((m) => m.status === "upcoming" || m.status === "live");
-  } else if (filter === "finished") {
-    result = result.filter((m) => m.status === "finished");
-  } else if (filter === "live") {
-    result = result.filter((m) => m.status === "live");
-  }
-
+  if (group) result = result.filter((m) => m.group === group.toUpperCase());
+  if (filter === "upcoming") result = result.filter((m) => m.status === "upcoming" || m.status === "live");
+  else if (filter === "finished") result = result.filter((m) => m.status === "finished");
+  else if (filter === "live") result = result.filter((m) => m.status === "live");
   return result;
 }
 
