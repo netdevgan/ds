@@ -21,7 +21,7 @@
   <meta property="og:locale" content="en_US">
 
   <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Football Schedule & Results | Live Scores & Standings">
   <meta name="twitter:description" content="Follow live football scores, match schedules, league standings from major competitions worldwide.">
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
@@ -67,12 +67,18 @@
           <span>Football</span>
         </div>
       </a>
-      <nav class="main-nav" aria-label="Main navigation">
-        <a href="#schedule">Schedule</a>
-        <a href="#results">Results</a>
-        <a href="#standings">Standings</a>
-        <a href="#teams">Teams</a>
-      </nav>
+      <div class="nav-right">
+        <div class="search-wrap" id="search-wrap">
+          <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input type="search" id="search-input" class="search-input" placeholder="Search teams, matches..." aria-label="Search">
+        </div>
+        <nav class="main-nav" aria-label="Main navigation">
+          <a href="#schedule">Schedule</a>
+          <a href="#results">Results</a>
+          <a href="#standings">Standings</a>
+          <a href="#teams">Teams</a>
+        </nav>
+      </div>
     </div>
   </header>
 
@@ -152,6 +158,14 @@
         <div id="teams-container" class="teams-grid">
           <p class="loading">Loading teams…</p>
         </div>
+      </div>
+    </section>
+    <!-- Search Results Overlay -->
+    <section id="search-section" class="search-section" style="display:none" aria-label="Search results">
+      <div class="container">
+        <h2 class="section-title">Search Results</h2>
+        <div id="search-info" class="search-info"></div>
+        <div id="search-results" class="matches-grid"></div>
       </div>
     </section>
   </main>

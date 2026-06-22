@@ -41,6 +41,7 @@ function renderCompetitionBar(competitions) {
 
 /* ── Competition Selection ── */
 function selectCompetition(code) {
+  closeSearch();
   if (STATE.selectedCode === code) return;
   STATE.selectedCode = code;
 
@@ -137,9 +138,10 @@ function renderMatches(code, filter) {
 
 function renderMatchCard(m) {
   const isLive = m.status === 'live';
+  const localTime = m.datetimeUtc ? formatLocalTime(m.datetimeUtc) : null;
   const scoreDisplay = m.homeScore !== null && m.awayScore !== null
     ? `<span class="ms-score">${m.homeScore} &ndash; ${m.awayScore}</span>`
-    : `<span class="ms-time">${m.timeLocal ? m.timeLocal.slice(0, 5) : m.date || 'TBD'}</span>`;
+    : `<span class="ms-time">${localTime || m.date || 'TBD'}</span>`;
 
   return `
     <div class="match-card ${isLive ? 'match-live' : ''}">
@@ -163,11 +165,22 @@ function renderMatchCard(m) {
         </div>
       </div>
       <div class="match-footer">
-        <span>${m.date || ''} ${m.timeLocal ? m.timeLocal.slice(0, 5) : ''}</span>
+        <span>${m.date || ''} ${localTime ? '• ' + localTime : ''}</span>
         <span>${m.venue || ''}</span>
       </div>
     </div>
   `;
+}
+
+function formatLocalTime(datetimeUtc) {
+  if (!datetimeUtc) return null;
+  try {
+    const d = new Date(datetimeUtc);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch {
+    return null;
+  }
 }
 
 /* ── Standings Rendering ── */
@@ -291,6 +304,7 @@ function bindEvents() {
       btn.setAttribute('aria-selected', 'true');
       STATE.currentFilter = btn.dataset.filter;
 
+      closeSearch();
       const code = STATE.selectedCode;
       if (code) {
         loadAllData(code);
@@ -318,8 +332,139 @@ function tryUseInlineData() {
   return false;
 }
 
+/* ── Search ── */
+function performSearch(query) {
+  const section = document.getElementById('search-section');
+  const container = document.getElementById('search-results');
+  const info = document.getElementById('search-info');
+  const q = query.trim().toLowerCase();
+
+  if (!q) {
+    section.style.display = 'none';
+    return;
+  }
+
+  const code = STATE.selectedCode;
+  const results = [];
+
+  // Search matches
+  for (const m of STATE.matches) {
+    if ((m.homeTeam && m.homeTeam.toLowerCase().includes(q)) ||
+        (m.awayTeam && m.awayTeam.toLowerCase().includes(q)) ||
+        (m.competition && m.competition.toLowerCase().includes(q)) ||
+        (m.stage || '').toLowerCase().includes(q)) {
+      results.push({ type: 'match', data: m });
+      if (results.length >= 20) break;
+    }
+  }
+
+  // Search teams (if not enough results)
+  if (results.length < 20) {
+    for (const t of STATE.teams) {
+      if ((t.name && t.name.toLowerCase().includes(q)) ||
+          (t.country || '').toLowerCase().includes(q)) {
+        results.push({ type: 'team', data: t });
+        if (results.length >= 20) break;
+      }
+    }
+  }
+
+  // Search standings
+  if (results.length < 20) {
+    for (const s of STATE.standings) {
+      if ((s.team && s.team.toLowerCase().includes(q)) ||
+          (s.group || '').toLowerCase().includes(q)) {
+        results.push({ type: 'standing', data: s });
+        if (results.length >= 20) break;
+      }
+    }
+  }
+
+  section.style.display = '';
+
+  if (!results.length) {
+    info.textContent = `No results for "${query.trim()}"`;
+    container.innerHTML = '';
+    return;
+  }
+
+  info.textContent = `Found ${results.length} result${results.length > 1 ? 's' : ''} for "${query.trim()}"`;
+  container.innerHTML = results.map(r => {
+    if (r.type === 'match') return renderMatchCard(r.data);
+    if (r.type === 'team') {
+      const t = r.data;
+      return `<div class="team-card">
+        ${t.badge ? `<img src="${t.badge}" alt="" class="team-badge large" loading="lazy">` : '<div class="team-badge-placeholder">?</div>'}
+        <div class="team-card-info">
+          <strong>${highlightText(t.name, q)}</strong>
+          <span>${t.country || ''}</span>
+          <span>${t.venue || ''}</span>
+        </div>
+      </div>`;
+    }
+    if (r.type === 'standing') {
+      const s = r.data;
+      return `<div class="match-card">
+        <div class="match-teams">
+          <div class="team home"><span class="team-name">${highlightText(s.team, q)}</span></div>
+          <div class="match-center"><span class="ms-score">${s.points} pts</span></div>
+        </div>
+        <div class="match-footer"><span>${s.competition} ${s.group ? '• Group ' + s.group : ''}</span><span>#${s.rank}</span></div>
+      </div>`;
+    }
+    return '';
+  }).join('');
+}
+
+function highlightText(text, query) {
+  if (!text || !query) return text || '';
+  const idx = text.toLowerCase().indexOf(query);
+  if (idx === -1) return text;
+  return text.slice(0, idx) + '<span class="search-highlight">' + text.slice(idx, idx + query.length) + '</span>' + text.slice(idx + query.length);
+}
+
+function closeSearch() {
+  const input = document.getElementById('search-input');
+  input.value = '';
+  performSearch('');
+}
+
+function bindSearch() {
+  const input = document.getElementById('search-input');
+  const icon = document.querySelector('.search-icon');
+
+  function doSearch() {
+    performSearch(input.value);
+  }
+
+  let debounceTimer;
+  input.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(doSearch, 200);
+  });
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      doSearch();
+    } else if (e.key === 'Escape') {
+      input.value = '';
+      performSearch('');
+      input.blur();
+    }
+  });
+
+  if (icon) {
+    icon.addEventListener('click', doSearch);
+    icon.style.cursor = 'pointer';
+    icon.style.pointerEvents = 'auto';
+  }
+}
+
 /* ── Init ── */
 document.addEventListener('DOMContentLoaded', () => {
+  bindSearch();
+  // ... rest of init
   bindEvents();
   if (!tryUseInlineData()) {
     loadCompetitions();
